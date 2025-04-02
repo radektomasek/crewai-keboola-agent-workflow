@@ -1,6 +1,8 @@
 from crewai import Agent
 from crewai.project import agent
 from langchain_openai import ChatOpenAI
+from src.tools import make_post_to_slack_tool
+
 
 @agent
 def keboola_reader_agent() -> Agent:
@@ -26,8 +28,8 @@ def analytics_agent() -> Agent:
 def slack_notifier_agent() -> Agent:
     return Agent(
         role="Slack Notifier",
-        goal="Post key analytics insights to a Slack channel",
-        backstory="You handle communication and send reports to stakeholders via Slack.",
+        goal="Format the Slack message with analysis results",
+        backstory="You generate team-ready summaries from the latest data.",
         llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
-        verbose=True,
+        verbose=True
     )
