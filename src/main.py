@@ -7,10 +7,14 @@ load_dotenv()
 if __name__ == "__main__":
     load_dotenv()
 
-    table_id = os.getenv("KBC_TABLE_ID")
+    crew_inputs = {
+        "table_id": os.getenv("KBC_TABLE_ID"),
+        "slack_webhook_url": os.getenv("SLACK_WEBHOOK_URL"),
+        "kbc_api_token": os.getenv("KBC_API_TOKEN"),
+        "kbc_api_url": os.getenv("KBC_API_URL"),
+    }
 
-    crew = KeboolaInsightsCrew(inputs={"table_id": table_id})
-    result = crew.analytics_pipeline_crew().kickoff()
+    crew = KeboolaInsightsCrew(inputs=crew_inputs)
+    result = crew.run_pipeline_and_post_to_slack()
 
-    print("\n Result: ")
-    print(result)
+    print("Result:", result)
