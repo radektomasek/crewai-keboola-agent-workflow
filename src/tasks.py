@@ -1,54 +1,68 @@
 from crewai import Task, Agent
 from crewai.project import task
-from src.agents import keboola_reader_agent, analytics_agent, slack_notifier_agent
+from src.agents import analytics_agent
 
+def calculate_billed_credits_task(df) -> Task:
+    csv_data = df.to_csv(index=False)
 
-@task
-def read_keboola_data_task(table_id: str) -> Task:
-    return Task(
-        description=f"Connect to Keboola Storage API and download the data from table ID `{table_id}`. Return the content as a structured table (e.g., CSV or DataFrame).",
-        expected_output="A CSV or DataFrame representation of the downloaded table data.",
-        agent=keboola_reader_agent(),
-        human_input=False,
-    )
-
-@task
-def calculate_billed_credits_task() -> Task:
     return Task(
         description=(
-            "Calculate the total billed credits from the Keboola usage data. "
-            "Use the most appropriate column, such as 'amount', 'usage_amount', or similar. "
-            "If the data contains multiple types of usage (e.g., API Calls, Storage Usage), sum all of them. "
-            "If no numeric usage data is found, respond with 'Unable to calculate billed credits'."
+            "You are provided with Keboola usage data in CSV format.\n\n"
+            "CSV Data:\n"
+            f"```csv\n{csv_data}\n```\n\n"
+            "Your task is to group this data by the 'Company_Name' column and calculate the **total billed credits** "
+            "per company. You must:\n"
+            "1. **Sum all numeric, non-empty values** in the 'Sum_of_Job_Billed_Credits_Used' column **for each company**.\n"
+            "2. Do NOT calculate an average. Only calculate a total sum.\n"
+            "3. Round each sum to exactly 2 decimal places.\n"
+            "4. Present each result on a new line, in the following format:\n"
+            "<Company Name> - Total Billed Credits: X.XX\n\n"
+            "Only include companies with a valid numeric billed credits total. Do not include any explanation, commentary, or extra text. Return only the output in the specified format."
         ),
-        expected_output="Total billed credits used, or a clear explanation if calculation is not possible.",
+        expected_output="Lines like 'Company A - Total Billed Credits: 123.45'",
         agent=analytics_agent(),
         human_input=False,
     )
 
-@task
-def calculate_error_rate_task() -> Task:
+def calculate_error_rate_task(df) -> Task:
+    csv_data = df.to_csv(index=False)
+
     return Task(
-        description="Calculate the error rate from the 'Error Jobs Ratio' column.",
-        expected_output="A single numeric value representing the error rate.",
+        description=(
+            "You are provided with Keboola usage data in CSV format.\n\n"
+            "CSV Data:\n"
+            f"```csv\n{csv_data}\n```\n\n"
+            "Group the data by the 'Company_Name' column and for each group:\n"
+            "1. Calculate the average of all non-empty numeric values in the 'Error_Jobs_Ratio' column.\n"
+            "2. Round the result to exactly 4 decimal places.\n"
+            "3. Present the result in the following format (one line per company):\n"
+            "<Company Name> - Error Rate: 0.XXXX\n"
+            "Only include companies that have at least one numeric error ratio value.\n"
+            "Do not add any commentary or explanation."
+        ),
+        expected_output="One line per company in '<Company Name> - Error Rate: 0.XXXX' format",
         agent=analytics_agent(),
         human_input=False,
     )
 
-@task
-def send_results_to_slack_task(table_id: str) -> Task:
+def generate_usage_summary_task(billed_output: str, error_output: str) -> Task:
     return Task(
         description=(
-            f"Generate a Slack message summary for table `{table_id}`.\n\n"
-            f"Use results from:\n"
-            f"- calculate_billed_credits_task\n"
-            f"- calculate_error_rate_task"
+            "You are given grouped Keboola usage metrics from two previous calculations:\n\n"
+            f"Billed Credits Output:\n{billed_output}\n\n"
+            f"Error Rate Output:\n{error_output}\n\n"
+            "Generate a summary report for Slack. For each company that appears in either list:\n"
+            "- Include the company name\n"
+            "- Include its total billed credits (X.XX) if available\n"
+            "- Include its error rate (0.XXXX) if available\n\n"
+            "Present the result in this format per company:\n"
+            "Company: <Company Name>\n"
+            "Total Billed Credits: X.XX\n"
+            "Average Error Rate: 0.XXXX\n\n"
+            "Only include companies that have at least one of the two values.\n"
+            "Do not explain your process, just return the summary."
         ),
-        expected_output="A string message ready to be posted to Slack.",
-        agent=slack_notifier_agent(),
-        context=[
-            calculate_billed_credits_task(),
-            calculate_error_rate_task(),
-        ],
+        expected_output="Formatted company summaries, ready for Slack",
+        agent=analytics_agent(),
         human_input=False,
     )

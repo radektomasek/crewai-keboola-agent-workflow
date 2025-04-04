@@ -4,63 +4,89 @@ from typing import Optional
 import pandas as pd
 import requests
 from io import StringIO
+
 from langchain.tools import StructuredTool
 from pydantic.v1 import BaseModel
+from google.auth.transport.requests import AuthorizedSession
+from google.oauth2.credentials import Credentials
+from urllib.parse import quote
 
+def fetch_table_columns(table_id: str, kbc_api_token: str, kbc_api_url: str) -> list[str]:
+    headers = {"X-StorageApi-Token": kbc_api_token}
+    url = f"{kbc_api_url.rstrip('/')}/v2/storage/tables/{table_id}"
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()["columns"]
 
 def download_keboola_table(table_id: str, kbc_api_token: str, kbc_api_url: str) -> pd.DataFrame:
     """
-    Download a table from Keboola Storage using async export (non-sliced).
-    Falls back to sample data if export fails.
+    Download a Keboola table using async export and assign columns from table metadata.
     """
+    headers = {"X-StorageApi-Token": kbc_api_token}
+    kbc_api_url = kbc_api_url.rstrip("/")
+    max_attempts = 30
+
     try:
-        print(f"Triggering async export for table: {table_id}")
-        export_resp = requests.post(
-            f"{kbc_api_url}/v2/storage/tables/{table_id}/export-async",
-            headers={"X-StorageApi-Token": kbc_api_token},
-            json={"format": "rfc", "limit": 100000, "gzip": False}
-        )
-        export_resp.raise_for_status()
-        export_job = export_resp.json()
-        job_id = export_job["id"]
+        columns = fetch_table_columns(table_id, kbc_api_token, kbc_api_url)
 
-        print(f"Waiting for export job {job_id} to complete...")
-        while True:
-            job_resp = requests.get(
-                f"{kbc_api_url}/v2/storage/jobs/{job_id}",
-                headers={"X-StorageApi-Token": kbc_api_token}
-            )
-            job_resp.raise_for_status()
-            job_data = job_resp.json()
-            if job_data["status"] == "success":
+        print(f"Starting async export for table: {table_id}")
+        export_url = f"{kbc_api_url}/v2/storage/tables/{table_id}/export-async"
+        export_response = requests.post(export_url, headers=headers, json={"format": "rfc"})
+        export_response.raise_for_status()
+        job_id = export_response.json()["id"]
+
+        job_url = f"{kbc_api_url}/v2/storage/jobs/{job_id}"
+        for attempt in range(1, max_attempts + 1):
+            job_response = requests.get(job_url, headers=headers)
+            job_response.raise_for_status()
+            status = job_response.json()["status"]
+            print(f"[{attempt}/{max_attempts}] Job status: {status}")
+            if status == "success":
                 break
-            elif job_data["status"] == "error":
-                raise RuntimeError("Export job failed.")
+            elif status in {"error", "cancelled"}:
+                raise Exception(f"Job failed: {job_response.json()}")
             time.sleep(2)
+        else:
+            raise TimeoutError("Export job did not complete in time.")
 
-        file_id = job_data["results"]["file"]["id"]
-        file_url = f"{kbc_api_url}/v2/storage/files/{file_id}/download"
-        print(f"Downloading file ID: {file_id}")
+        file_id = job_response.json()["results"]["file"]["id"]
+        metadata_url = f"{kbc_api_url}/v2/storage/files/{file_id}?federationToken=1"
+        metadata = requests.get(metadata_url, headers=headers).json()
+        manifest_url = metadata["url"]
 
-        file_resp = requests.get(file_url, headers={"X-StorageApi-Token": kbc_api_token})
-        file_resp.raise_for_status()
+        access_token = metadata.get("gcsCredentials", {}).get("access_token") or metadata["credentials"]["access_token"]
+        creds = Credentials(token=access_token)
+        authed_session = AuthorizedSession(creds)
 
-        df = pd.read_csv(StringIO(file_resp.text))
-        print(f"Downloaded {len(df)} rows.")
-        return df
+        print(f"Downloading manifest: {manifest_url}")
+        manifest = requests.get(manifest_url).json()
+        entries = manifest.get("entries", [])
+
+        # 📥 Download and combine all slices
+        merged_df = pd.DataFrame()
+        for entry in entries:
+            gs_url = entry["url"]
+            _, path = gs_url.split("gs://", 1)
+            bucket_name, *blob_parts = path.split("/")
+            blob_path = "/".join(blob_parts)
+            quoted_path = quote(blob_path, safe="")
+
+            download_url = f"https://storage.googleapis.com/storage/v1/b/{bucket_name}/o/{quoted_path}?alt=media"
+            response = authed_session.get(download_url)
+            response.raise_for_status()
+
+            df = pd.read_csv(StringIO(response.text), header=None)
+            df.columns = columns
+            merged_df = pd.concat([merged_df, df], ignore_index=True)
+
+            print(f"Downloaded slice: {gs_url}")
+
+        print(f"Data from {table_id} downloaded.")
+        return merged_df
 
     except Exception as e:
-        return pd.DataFrame({
-            "Company_ID": [1, 2],
-            "Company_Name": ["Acme Corp", "Globex"],
-            "KBC_Component_ID": ["kbc.component.1", "kbc.component.2"],
-            "KBC_Component": ["Extractor", "Writer"],
-            "Configurations": [3, 5],
-            "Jobs": [10, 12],
-            "Sum_of_Job_Billed_Credits_Used": [1.23, 4.56],
-            "Job_Run_Time_Minutes": [25, 40],
-            "Error_Jobs_Ratio": [0.1, 0.0]
-        })
+        print(f"Error: {str(e)}")
+        raise
 
 class SlackInput(BaseModel):
     summary: str

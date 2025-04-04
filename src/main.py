@@ -16,5 +16,3 @@ if __name__ == "__main__":
 
     crew = KeboolaInsightsCrew(inputs=crew_inputs)
     result = crew.run_pipeline_and_post_to_slack()
-
-    print("Result:", result)
