@@ -1,35 +1,26 @@
 from crewai import Agent
 from crewai.project import agent
 from langchain_openai import ChatOpenAI
-from src.tools import make_post_to_slack_tool
 
-
-@agent
-def keboola_reader_agent() -> Agent:
-    return Agent(
-        role="Keboola Reader",
-        goal="Download data from Keboola table for further analysis",
-        backstory="You're a data integration agent who specializes in accessing and extracting structured data from the Keboola platform.",
-        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
-        verbose=True
-    )
+llm = ChatOpenAI(model="gpt-4-turbo", temperature=0)
 
 @agent
 def analytics_agent() -> Agent:
     return Agent(
         role="Data Analyst",
-        goal="Perform analytics on Keboola data",
-        backstory="You're a data analyst who extracts insights from platform usage data.",
-        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
+        goal="Perform accurate calculations and insights from Keboola usage data",
+        backstory=(
+            "Expert data analyst with extensive experience in processing CSV data, "
+            "calculating summaries, and generating accurate metrics. You always verify "
+            "your calculations by double-checking your work and processing the entire dataset, "
+            "not just samples. You pay close attention to column names, data types, and "
+            "handle missing or empty values appropriately."
+        ),
+        tools=[],
+        llm=llm,
         verbose=True,
+        allow_delegation=False,
     )
 
-@agent
-def slack_notifier_agent() -> Agent:
-    return Agent(
-        role="Slack Notifier",
-        goal="Format the Slack message with analysis results",
-        backstory="You generate team-ready summaries from the latest data.",
-        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
-        verbose=True
-    )
+
+
