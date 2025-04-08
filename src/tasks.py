@@ -1,6 +1,5 @@
 from crewai import Task, Agent
-from crewai.project import task
-from src.agents import analytics_agent
+from agents import analytics_agent
 
 def calculate_billed_credits_task(df) -> Task:
     csv_data = df.to_csv(index=False)
