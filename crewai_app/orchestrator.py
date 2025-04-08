@@ -29,17 +29,17 @@ class KeboolaInsightsCrew:
 
     @agent
     def analytics_agent(self) -> Agent:
-        from src.agents import analytics_agent
+        from crewai_app.agents import analytics_agent
         return analytics_agent()
 
     @task
     def calculate_billed_credits_task(self) -> Task:
-        from src.tasks import calculate_billed_credits_task
+        from crewai_app.tasks import calculate_billed_credits_task
         return calculate_billed_credits_task(self.df)
 
     @task
     def calculate_error_rate_task(self) -> Task:
-        from src.tasks import calculate_error_rate_task
+        from crewai_app.tasks import calculate_error_rate_task
         return calculate_error_rate_task(self.df)
 
     @crew

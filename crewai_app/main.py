@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from crew_base import KeboolaInsightsCrew
+from orchestrator import KeboolaInsightsCrew
 
 load_dotenv()
 
