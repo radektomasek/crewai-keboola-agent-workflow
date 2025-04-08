@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime
+from typing import Dict, Any
 
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
@@ -80,3 +82,9 @@ class KeboolaInsightsCrew:
                 "status": "error",
                 "message": str(e),
             }
+
+def get_status() -> Dict[str, Any]:
+    """
+    Get the current status of the service.
+    """
+    return {"status": "running", "timestamp": datetime.now().isoformat()}
