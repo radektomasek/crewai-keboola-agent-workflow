@@ -5,8 +5,8 @@ from typing import Dict, Any
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from langchain_openai import ChatOpenAI
-from tools import download_keboola_table, make_post_to_slack_tool
-from utils import format_slack_summary_with_ai_per_customer
+from crewai_app.tools import download_keboola_table, make_post_to_slack_tool
+from crewai_app.utils import format_slack_summary_with_ai_per_customer
 
 logger = logging.getLogger(__name__)
 
