@@ -3,8 +3,8 @@ import logging
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from langchain_openai import ChatOpenAI
-from src.tools import download_keboola_table, make_post_to_slack_tool
-from src.utils import format_slack_summary_with_ai_per_customer
+from tools import download_keboola_table, make_post_to_slack_tool
+from utils import format_slack_summary_with_ai_per_customer
 
 logger = logging.getLogger(__name__)
 
