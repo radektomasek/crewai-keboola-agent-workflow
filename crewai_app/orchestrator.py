@@ -83,7 +83,7 @@ class KeboolaInsightsCrew:
                 "message": str(e),
             }
 
-def get_status() -> Dict[str, Any]:
+def get_status(param) -> Dict[str, Any]:
     """
     Get the current status of the service.
     """
