@@ -161,22 +161,17 @@ async def kickoff_analytics(request: Request, background_tasks: BackgroundTasks)
         }
 
         logger.info("Prepared crew inputs")
+        logger.info("Running crew synchronously (wait=true)")
 
-        def run_pipeline():
-            crew = KeboolaInsightsCrew(inputs=crew_inputs)
-            result = crew.analyze_data_with_no_approval()
-            logger.info(f"Async crew result: {result}")
+        crew = KeboolaInsightsCrew(inputs=crew_inputs)
+        result = crew.analyze_data_with_no_approval()
 
-            logger.info("Running crew synchronously (wait=true)")
-            crew = KeboolaInsightsCrew(inputs=crew_inputs)
-            result = crew.analyze_data_with_no_approval()
-
-            return {
-                "job_id": job_id,
-                "status": result.get("status"),
-                "result": result,
-                "timestamp": datetime.now().isoformat(),
-            }
+        return {
+            "job_id": job_id,
+            "status": result.get("status"),
+            "result": result,
+            "timestamp": datetime.now().isoformat(),
+        }
 
     except Exception as e:
         logger.error(f"Error setting up crew kickoff: {str(e)}")
