@@ -14,6 +14,8 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
+from crewai_app import KeboolaInsightsCrew
+
 # Set a longer timeout for the app to handle long-running operations
 app = FastAPI(
     title="CrewAI Content Orchestrator",
@@ -496,262 +498,68 @@ async def health_check():
 
 
 @app.post("/kickoff")
-async def kickoff_crew(request: Request, background_tasks: BackgroundTasks):
+async def kickoff_analytics(request: Request, background_tasks: BackgroundTasks):
     """
-    Kickoff a crew asynchronously and return a job ID
+    Kickoff the KeboolaInsightsCrew pipeline with a provided table_id.
+    Env vars are used for the rest of the configuration.
     """
     try:
         data = await request.json()
-        crew_name = data.get("crew", "ContentCreationCrew")
-        inputs = data.get("inputs", {})
-        webhook_url = data.get("webhook_url")
-        wait = data.get("wait", False)  # Option to wait for completion
-        require_approval = inputs.get(
-            "require_approval", True
-        )  # Get require_approval from inputs
-        
-        # Get environment variables from request if provided
+        job_id = str(uuid.uuid4())
+        table_id = data.get("table_id")
         env_vars = data.get("env_vars", {})
-        
-        # Special handling for ConvoNewsletterCrew
-        if crew_name == "ConvoNewsletterCrew":
-            # Check for required environment variables
-            if "ANTHROPIC_API_KEY" not in env_vars and not os.getenv("ANTHROPIC_API_KEY"):
-                return JSONResponse(
-                    status_code=400,
-                    content={"error": "ANTHROPIC_API_KEY is required for ConvoNewsletterCrew"},
-                )
-                
-            # Check for EXA_API_KEY
-            if "EXA_API_KEY" not in env_vars and not os.getenv("EXA_API_KEY"):
-                logger.warning("EXA_API_KEY is not provided for ConvoNewsletterCrew, some functionality may not work")
-        
-        # Set environment variables from request
+        wait = data.get("wait", False)
+
+        if not table_id:
+            return JSONResponse(
+                status_code=422,
+                content={"error": "Missing required parameter: table_id"},
+            )
+
+        logger.info(f"Received kickoff request for table_id: {table_id}")
+        logger.info(f"Received env_vars override: {env_vars}")
+
         for key, value in env_vars.items():
             if isinstance(value, str):
-                logger.info(f"Setting environment variable from request: {key}")
+                logger.info(f"Setting env var {key} from request")
                 os.environ[key] = value
 
-        logger.info(f"Kickoff request for crew {crew_name} with inputs: {inputs}")
-        logger.info(
-            f"Wait for completion: {wait}, Require approval: {require_approval}"
-        )
-
-        # Check if the crew exists in the user module
-        if not hasattr(user_module, crew_name):
-            logger.error(f"Crew {crew_name} not found in user module")
-            return JSONResponse(
-                status_code=404,
-                content={"error": f"Crew {crew_name} not found"},
-            )
-
-        # Generate a unique job ID
-        job_id = str(uuid.uuid4())
-
-        # Initialize job in the jobs dictionary
-        jobs[job_id] = {
-            "id": job_id,
-            "crew": crew_name,
-            "inputs": inputs,
-            "status": "queued",
-            "created_at": datetime.now().isoformat(),
-            "webhook_url": webhook_url,
+        crew_inputs = {
+            "table_id": table_id,
+            "slack_webhook_url": os.getenv("SLACK_WEBHOOK_URL"),
+            "kbc_api_token": os.getenv("KBC_API_TOKEN"),
+            "kbc_api_url": os.getenv("KBC_API_URL"),
         }
 
-        logger.info(f"Created job {job_id} for crew {crew_name}")
+        logger.info("Prepared crew inputs")
+
+        def run_pipeline():
+            crew = KeboolaInsightsCrew(inputs=crew_inputs)
+            result = crew.analyze_data_with_no_approval()
+            logger.info(f"Async crew result: {result}")
 
         if wait:
-            # Synchronous execution - wait for result
-            try:
-                logger.info(f"Executing job {job_id} synchronously")
-
-                # Check if we should use create_content_with_hitl directly
-                if (
-                    hasattr(user_module, "create_content_with_hitl")
-                    and crew_name == "ContentCreationCrew"
-                ):
-                    logger.info(
-                        "Using create_content_with_hitl directly for synchronous execution"
-                    )
-
-                    # Call create_content_with_hitl directly
-                    result = user_module.create_content_with_hitl(
-                        topic=inputs["topic"],
-                        feedback=inputs.get("feedback"),
-                        require_approval=require_approval,
-                    )
-
-                    # Convert result to a dictionary if it's not already
-                    if not isinstance(result, dict):
-                        result_dict = {
-                            "content": str(result),
-                            "length": len(str(result)),
-                        }
-                    else:
-                        result_dict = result
-
-                    # Update job with success result
-                    jobs[job_id] = {
-                        **jobs[job_id],
-                        "status": "completed"
-                        if result_dict.get("status") != "needs_approval"
-                        else "pending_approval",
-                        "completed_at": datetime.now().isoformat(),
-                        "result": result_dict,
-                    }
-
-                    return {
-                        "job_id": job_id,
-                        "status": jobs[job_id]["status"],
-                        "result": result_dict,
-                    }
-
-                # Otherwise, use the crew approach
-                crew_class = getattr(user_module, crew_name)
-                
-                # Determine if the crew class is a CrewBase class
-                is_crew_base = hasattr(crew_class, '__crewbase__')
-                logger.info(f"Crew class {crew_name} is CrewBase: {is_crew_base}")
-                
-                # Initialize the crew instance based on its type
-                try:
-                    # First try initializing with inputs
-                    crew_instance = crew_class(inputs=inputs)
-                    logger.info(f"Created crew instance with inputs parameter")
-                except TypeError:
-                    try:
-                        # If that fails, try without inputs parameter
-                        crew_instance = crew_class()
-                        logger.info(f"Created crew instance without inputs parameter")
-                    except Exception as e:
-                        logger.error(f"Failed to create crew instance: {e}")
-                        raise
-                
-                logger.info(f"Created crew instance of type: {type(crew_instance).__name__}")
-
-                # For CrewBase classes, we need to find a method that returns a Crew object
-                # These are typically decorated with @crew
-                crew_methods = []
-                for method_name in dir(crew_instance):
-                    if not method_name.startswith("_") and callable(
-                        getattr(crew_instance, method_name)
-                    ):
-                        method = getattr(crew_instance, method_name)
-                        # Check if this is a crew method (has a __crew__ attribute or returns a Crew)
-                        if hasattr(method, "__crew__"):
-                            crew_methods.append(method_name)
-                            logger.info(
-                                f"Found crew method with __crew__ attribute: {method_name}"
-                            )
-                        elif (
-                            hasattr(method, "__annotations__")
-                            and "return" in method.__annotations__
-                            and method.__annotations__["return"] is not None
-                            and hasattr(method.__annotations__["return"], "__name__")
-                            and method.__annotations__["return"].__name__ == "Crew"
-                        ):
-                            crew_methods.append(method_name)
-                            logger.info(
-                                f"Found crew method with Crew return annotation: {method_name}"
-                            )
-
-                if not crew_methods:
-                    logger.error(f"No crew methods found in {crew_name}")
-                    raise ValueError(f"No crew methods found in {crew_name}")
-
-                # Choose the appropriate crew method based on inputs
-                if (
-                    "feedback" in inputs
-                    and "content_crew_with_feedback" in crew_methods
-                ):
-                    crew_method_name = "content_crew_with_feedback"
-                else:
-                    crew_method_name = crew_methods[0]  # Default to first crew method
-
-                logger.info(f"Using crew method: {crew_method_name}")
-
-                # Get the crew method
-                crew_method = getattr(crew_instance, crew_method_name)
-                logger.info(f"Crew method type: {type(crew_method).__name__}")
-
-                # First call the crew method to get the Crew object
-                logger.info("Calling crew method to get crew object")
-                crew_object = crew_method()
-
-                if crew_object is None:
-                    raise ValueError(
-                        f"Crew method {crew_method_name} returned None "
-                        "instead of a Crew object"
-                    )
-
-                logger.info(f"Crew object type: {type(crew_object).__name__}")
-
-                # Now call kickoff on the crew object
-                # Try different approaches to kickoff based on what the crew supports
-                try:
-                    # First try with inputs parameter
-                    logger.info("Attempting to call kickoff with inputs parameter")
-                    result = crew_object.kickoff(inputs=inputs)
-                except TypeError as e:
-                    if "unexpected keyword argument 'inputs'" in str(e):
-                        # If that fails with the specific error about inputs, try without inputs
-                        logger.info("Calling kickoff without inputs parameter")
-                        result = crew_object.kickoff()
-                    else:
-                        # If it's a different TypeError, re-raise
-                        raise
-                
-                logger.info(f"Kickoff result type: {type(result).__name__}")
-
-                # Convert result to a dictionary if it's a TaskOutput object
-                result_dict = {}
-                if hasattr(result, "raw"):
-                    content = str(result.raw)
-                    result_dict = {"content": content, "length": len(content)}
-                elif isinstance(result, dict):
-                    result_dict = result
-                else:
-                    content = str(result)
-                    result_dict = {"content": content, "length": len(content)}
-
-                # Update job with success result
-                jobs[job_id] = {
-                    **jobs[job_id],
-                    "status": "completed",
-                    "completed_at": datetime.now().isoformat(),
-                    "result": result_dict,
-                }
-
-                return {"job_id": job_id, "status": "completed", "result": result_dict}
-            except Exception as e:
-                # Update job with error information
-                jobs[job_id] = {
-                    **jobs[job_id],
-                    "status": "error",
-                    "error_at": datetime.now().isoformat(),
-                    "error": str(e),
-                    "error_type": e.__class__.__name__,
-                }
-
-                return JSONResponse(
-                    status_code=500,
-                    content={"job_id": job_id, "status": "error", "error": str(e)},
-                )
-        else:
-            # Asynchronous execution - start in background
-            background_tasks.add_task(
-                process_job_in_background,
-                job_id,
-                crew_name,
-                inputs,
-                webhook_url,
-            )
+            logger.info("Running crew synchronously (wait=true)")
+            crew = KeboolaInsightsCrew(inputs=crew_inputs)
+            result = crew.analyze_data_with_no_approval()
 
             return {
                 "job_id": job_id,
-                "status": "queued",
-                "message": "Crew kickoff started in the background",
+                "status": result.get("status"),
+                "result": result,
+                "timestamp": datetime.now().isoformat(),
             }
+        else:
+            logger.info("Running crew asynchronously in background")
+            background_tasks.add_task(run_pipeline)
+
+            return {
+                "job_id": str(uuid.uuid4()),
+                "status": "queued",
+                "message": "Pipeline started in background.",
+                "timestamp": datetime.now().isoformat(),
+            }
+
 
     except Exception as e:
         logger.error(f"Error setting up crew kickoff: {str(e)}")
