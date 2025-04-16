@@ -1,12 +1,12 @@
 crewai>=0.108.0
-langchain>=0.1.11
-langchain-openai>=0.1.2
-openai>=1.13.3
+langchain>=0.3.21
+langchain-openai>=0.2.14
+openai>=1.69.0
 pandas>=2.2.1
 python-dotenv>=1.0.1
 requests>=2.32.3
 boto3>=1.37.24
-langchain-core>=0.1.0
+langchain-core>=0.3.49
 pydantic~=2.10.6
 jmespath~=1.0.1
 pytest~=8.3.5

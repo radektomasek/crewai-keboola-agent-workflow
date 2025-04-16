@@ -1,17 +1,55 @@
 import time
-from typing import Optional
-
 import pandas as pd
 import requests
 from io import StringIO
 
-from langchain.tools import StructuredTool
-from pydantic.v1 import BaseModel
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials
 from urllib.parse import quote
+from crewai.tools import BaseTool
+
+class KeboolaDownloadTool(BaseTool):
+    name: str = "download_keboola_table_tool"
+    description: str = """
+    Download a table from Keboola Connection and return its contents as a CSV string.
+
+    Args:
+        table_id (str): The ID of the table to download (e.g., "in.c-usage.usage_data")
+
+    Returns:
+        str: CSV data as a string
+    """
+    kbc_api_token: str
+    kbc_api_url: str
+
+    def _run(self, table_id: str) -> str:
+        try:
+            df = download_keboola_table(table_id, self.kbc_api_token, self.kbc_api_url)
+            return df.to_csv(index=False)
+        except Exception as e:
+            return f"Error downloading table: {str(e)}"
+
+class SlackPostTool(BaseTool):
+    name: str = "post_to_slack_tool"
+    description: str = """
+    Post a message to a Slack channel using a webhook URL.
+
+    Args:
+        message (str): The message to post to Slack
+
+    Returns:
+        str: Confirmation message
+    """
+    webhook_url: str
+
+    def _run(self, message: str) -> str:
+        try:
+            return post_to_slack(message, self.webhook_url)
+        except Exception as e:
+            return f"Error posting to Slack: {str(e)}"
 
 def fetch_table_columns(table_id: str, kbc_api_token: str, kbc_api_url: str) -> list[str]:
+    """Fetch column names from a Keboola table."""
     headers = {"X-StorageApi-Token": kbc_api_token}
     url = f"{kbc_api_url.rstrip('/')}/v2/storage/tables/{table_id}"
     response = requests.get(url, headers=headers)
@@ -88,22 +126,21 @@ def download_keboola_table(table_id: str, kbc_api_token: str, kbc_api_url: str) 
         print(f"Error: {str(e)}")
         raise
 
-class SlackInput(BaseModel):
-    summary: str
+def post_to_slack(message: str, webhook_url: str) -> str:
+    """
+    Post a message to Slack using a webhook URL.
 
-def make_post_to_slack_tool(webhook_url: Optional[str] = None) -> StructuredTool:
-    def _post_summary(summary: str) -> str:
-        if not webhook_url:
-            raise ValueError("Missing Slack webhook URL.")
+    Args:
+        message: The text to post to Slack
+        webhook_url: The Slack webhook URL
 
-        payload = {"text": summary}
-        response = requests.post(webhook_url, json=payload)
-        response.raise_for_status()
-        return "Report successfully posted to Slack."
+    Returns:
+        A confirmation message
+    """
+    if not webhook_url:
+        raise ValueError("Missing Slack webhook URL.")
 
-    return StructuredTool.from_function(
-        name="post_to_slack",
-        description="Post a summary to Slack using a webhook.",
-        func=_post_summary,
-        args_schema=SlackInput,
-    )
+    payload = {"text": message}
+    response = requests.post(webhook_url, json=payload)
+    response.raise_for_status()
+    return "Report successfully posted to Slack."
