@@ -1,0 +1,96 @@
+download_data_task:
+  description: >
+    Download data from Keboola Storage API for analysis.
+    
+    You need to get information about the table ID from the inputs passed to the crew.
+    The table ID will be available in the inputs dictionary under the key "kbc_table_id".
+    
+    Use the download_keboola_table_tool to download this table.
+    
+    Use the following format to call the tool:
+    
+    Do I need to use a tool? Yes
+    Action: download_keboola_table_tool
+    Action Input: <table_id>
+    
+    Make sure to replace <table_id> with the actual table ID from inputs.
+    
+    Return the CSV data as your Final Answer.
+
+  expected_output: >
+    CSV data from Keboola table
+
+calculate_billed_credits_task:
+  description: >
+    You are provided with Keboola usage data in CSV format from the previous task.
+    
+    Look at the output of the previous task which contains the CSV data.
+    
+    Your task is to group this data by the 'Company_Name' column and calculate the **total billed credits** per company. 
+    
+    **You must**:
+    
+    1. **Sum all numeric, non-empty values** in the 'Sum_of_Job_Billed_Credits_Used' column **for each company**.
+    2. Do NOT calculate an average. Only calculate a total sum.
+    3. Round each sum to exactly 2 decimal places.
+    4. Present each result on a new line, in the following format:
+      <Company Name> - Total Billed Credits: X.XX
+    
+    Only include companies with a valid numeric billed credits total. Do not include any explanation, commentary, or extra text. Return only the output in the specified format.
+
+  expected_output: >
+    Single line per company in '<Company Name> - Total Billed Credits: 123.45' format
+
+calculate_error_rate_task:
+  description: >
+    You are provided with Keboola usage data in CSV format from the download_data_task.
+    
+    Look at the output of the download_data_task which contains the CSV data.
+    
+    Your task is to group this data by the 'Company_Name' column:
+    
+    **For each group you must**
+    
+    1. Calculate the average of all non-empty numeric values in the 'Error_Jobs_Ratio' column.
+    2. Round the result to exactly 4 decimal places.
+    3. Present the result in the following format (one line per company):
+    <Company Name> - Error Rate: 0.XXXX
+    Only include companies that have at least one numeric error ratio value.
+    Do not add any commentary or explanation.
+
+  expected_output: >
+    Single line per company in '<Company Name> - Error Rate: 0.XXXX' format
+
+generate_usage_summary_task:
+  description: >
+    You are given grouped Keboola usage metrics from previous calculations.
+    
+    Look at the outputs of the previous tasks:
+    - calculate_billed_credits_task 
+    - calculate_error_rate_task
+    
+    Generate a summary report for Slack. For each company that appears in either list:
+    
+      - Include the company name
+      - Include its total billed credits (X.XX) if available
+      - Include its error rate (0.XXXX) if available
+    
+    Present the result in this format per company:
+      
+      Company: <Company Name>
+      Total Billed Credits: X.XX
+      Average Error Rate: 0.XXXX
+    
+    Only include companies that have at least one of the two values.
+    Do not explain your process, just return the summary.
+    
+    After generating the summary, use the post_to_slack_tool to send this summary to Slack using this format:
+    
+    Do I need to use a tool? Yes
+    Action: post_to_slack_tool
+    Action Input: <your generated summary>
+    
+    After posting to Slack, return the complete summary as your Final Answer.
+
+  expected_output: >
+    Formatted company summaries, with confirmation of posting to Slack
