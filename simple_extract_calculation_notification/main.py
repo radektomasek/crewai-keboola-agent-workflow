@@ -2,7 +2,7 @@
 import argparse
 import warnings
 from dotenv import load_dotenv
-from .crew import KeboolaInsightsCrew
+from simple_extract_calculation_notification.crew import KeboolaInsightsCrew
 
 load_dotenv()
 
