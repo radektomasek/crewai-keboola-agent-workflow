@@ -67,6 +67,8 @@ jobs:
           AGENT_NAME: ${{ steps.prep_agent_name.outputs.full_agent_name }}
           AGENT_DESCRIPTION: ${{ vars.AGENT_DESCRIPTION }}
           AGENT_ENTRYPOINT: ${{ vars.AGENT_ENTRYPOINT }}
+          AGENT_KBC_API_URL: ${{ vars.AGENT_KBC_API_URL }}
+          AGENT_OPENAI_API_BASE: ${{ vars.AGENT_OPENAI_API_BASE }}
           AGENT_KBC_API_TOKEN: ${{ secrets.AGENT_OPENAI_API_KEY }}
           AGENT_OPENAI_API_KEY: ${{ secrets.AGENT_OPENAI_API_KEY }}
           AGENT_SLACK_WEBHOOK_URL: ${{ secrets.AGENT_SLACK_WEBHOOK_URL }}
