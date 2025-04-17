@@ -167,7 +167,7 @@ jobs:
           agent_name: ${{ needs.build.outputs.full_agent_name }}
           agentic_runtime_api_url: ${{ vars.AGENTIC_RUNTIME_API_URL }}
           crew_inputs_json: ${{ steps.crew_inputs.outputs.json_string }}
-          runtime_token: ${{ secrets.KBC_AUTHORIZATION_TOKEN }}
+          runtime_token: ${{ secrets.AGENTIC_RUNTIME_API_TOKEN }}
           target_crew_name: ${{ vars.TARGET_CREW_NAME || '' }}
     outputs:
       full_agent_name: ${{ needs.build.outputs.full_agent_name }}
