@@ -1,0 +1,224 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, closed ]
+
+env:
+  AGENTIC_RUNTIME_API_URL: ${{ vars.AGENTIC_RUNTIME_API_URL }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Prepare Branch-specific Agent Name
+        id: prep_agent_name
+        env:
+          BASE_AGENT_NAME: ${{ vars.AGENT_NAME }}
+          GH_REF_NAME: ${{ github.ref_name }}
+          GH_HEAD_REF: ${{ github.head_ref }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$GH_EVENT_NAME" == "pull_request" ]; then
+            BRANCH_NAME=${GITHUB_HEAD_REF##*/}
+            echo "Event is pull_request, using head_ref: $BRANCH_NAME"
+          else
+            if [ "$GH_REF_NAME" == "main" ]; then
+              BRANCH_NAME="main"
+              echo "Event is $GH_EVENT_NAME to main branch, using ref_name: $BRANCH_NAME"
+            else
+              BRANCH_NAME=${GITHUB_HEAD_REF##*/}
+              echo "Event is $GH_EVENT_NAME to non-main ref, using ref_name: $BRANCH_NAME"
+            fi
+          fi
+          
+          sanitized_branch=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed -e 's|/|-|g' -e 's|[^a-z0-9-]||g')
+          sanitized_branch=${sanitized_branch:0:20}
+          full_agent_name="$BASE_AGENT_NAME-$sanitized_branch"
+          echo "Full agent name: $full_agent_name"
+          echo "full_agent_name=$full_agent_name" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Run CrewAI Agent (Example)
+        run: |
+          echo "CrewAI agent setup complete. Add specific run/test commands here."
+
+      - name: Generate Payload
+        id: generate_payload
+        env:
+          AGENT_NAME: ${{ steps.prep_agent_name.outputs.full_agent_name }}
+          AGENT_DESCRIPTION: ${{ vars.AGENT_DESCRIPTION }}
+          AGENT_ENTRYPOINT: ${{ vars.AGENT_ENTRYPOINT }}
+          AGENT_KBC_API_TOKEN: ${{ secrets.AGENT_OPENAI_API_KEY }}
+          AGENT_OPENAI_API_KEY: ${{ secrets.AGENT_OPENAI_API_KEY }}
+          AGENT_SLACK_WEBHOOK_URL: ${{ secrets.AGENT_SLACK_WEBHOOK_URL }}
+          GITHUB_REPOSITORY_URL: https://github.com/${{ github.repository }}
+        run: |
+          echo "Generating payload for agent: $AGENT_NAME..."
+          jq -n --arg name "$AGENT_NAME" \
+                --arg description "$AGENT_DESCRIPTION" \
+                --arg entrypoint "$AGENT_ENTRYPOINT" \
+                --arg repo_url "$GITHUB_REPOSITORY_URL" \
+                --arg branch "${{ steps.prep_agent_name.outputs.branch_name }}" \
+                '{name: $name, description: $description, entrypoint: $entrypoint, codeSource: {type: "git", gitRepo: {url: $repo_url, branch: $branch}}, envVars: []}' > generated_payload.json
+          env | grep '^AGENT_' | while IFS='=' read -r key value; do
+            var_name="${key#AGENT_}"
+            if [ "$var_name" == "NAME" ]; then continue; fi 
+            if [[ "$var_name" =~ (TOKEN|KEY|SECRET|PASSWORD) ]]; then secure_flag=true; else secure_flag=false; fi
+            jq --arg name "$var_name" --arg value "$value" --argjson secure "$secure_flag" \
+              '.envVars += [{"name": $name, "value": $value, "secure": $secure}]' \
+              generated_payload.json > temp_payload.json && mv temp_payload.json generated_payload.json
+          done
+          echo "Generated payload:"
+          cat generated_payload.json
+
+      - name: Check if Agent Runtime Exists
+        id: check_runtime
+        env:
+          AGENT_NAME: ${{ steps.prep_agent_name.outputs.full_agent_name }}
+          AGENTIC_RUNTIME_API_TOKEN: ${{ secrets.AGENTIC_RUNTIME_API_TOKEN }}
+        run: |
+          echo "Checking if runtime '$AGENT_NAME' exists..."
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $AGENTIC_RUNTIME_API_TOKEN" \
+            "${{ env.AGENTIC_RUNTIME_API_URL }}/api/runtimes/${AGENT_NAME}")
+          if [ "$http_code" -eq 200 ]; then
+            echo "Runtime '$AGENT_NAME' exists."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          elif [ "$http_code" -eq 404 ]; then
+            echo "Runtime '$AGENT_NAME' does not exist."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Unexpected HTTP status code $http_code when checking runtime existence."
+            exit 1
+          fi
+
+      - name: Create Agent Runtime
+        if: steps.check_runtime.outputs.exists == 'false'
+        env:
+          AGENTIC_RUNTIME_API_TOKEN: ${{ secrets.AGENTIC_RUNTIME_API_TOKEN }}
+        run: |
+          echo "Creating agent runtime..."
+          curl -fsS -X POST ${{ env.AGENTIC_RUNTIME_API_URL }}/api/runtimes \
+            -H "Authorization: Bearer $AGENTIC_RUNTIME_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @generated_payload.json
+          if [ $? -ne 0 ]; then echo "::error::Failed to create agent runtime."; exit 1; fi
+          echo "Agent runtime creation initiated."
+
+      - name: Wait for Agent Runtime to be Ready
+        env:
+          AGENT_NAME: ${{ steps.prep_agent_name.outputs.full_agent_name }}
+          AGENTIC_RUNTIME_API_TOKEN: ${{ secrets.AGENTIC_RUNTIME_API_TOKEN }}
+        run: |
+          echo "Waiting for agent runtime '$AGENT_NAME' to become ready..."
+          ready=false; timeout=30; delay=15
+          for (( i=1; i<=$timeout; i++ )); do
+            echo "Attempt $i/$timeout: Checking status..."
+            status_response=$(curl -fsS --fail -H "Authorization: Bearer AGENTIC_RUNTIME_API_TOKEN" \
+              "${{ env.AGENTIC_RUNTIME_API_URL }}/api/runtimes/${AGENT_NAME}")
+            if [ $? -ne 0 ]; then echo "::error::Failed to get runtime status for $AGENT_NAME."; exit 1; fi
+            current_status=$(echo "$status_response" | jq -r '.status.phase')
+            echo "Current status: $current_status"
+            if [ "$current_status" == "Running" ]; then ready=true; echo "Agent runtime '$AGENT_NAME' is ready."; break; fi
+            if [ $i -lt $timeout ]; then echo "Runtime not ready yet. Waiting $delay seconds..."; sleep $delay; fi
+          done
+          if [ "$ready" = false ]; then echo "::error::Timeout: Agent runtime '$AGENT_NAME' did not become ready after $(($timeout * $delay)) seconds."; exit 1; fi
+    outputs:
+      full_agent_name: ${{ steps.prep_agent_name.outputs.full_agent_name }}
+
+
+  trigger_kickoff:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      CREW_KBC_TABLE_ID: ${{ vars.CREW_KBC_TABLE_ID }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate Crew Inputs JSON
+        id: crew_inputs
+        run: |
+          echo "Generating crew inputs JSON..."
+          inputs_json=$(env | grep '^CREW_INPUT_' | sed 's/^CREW_INPUT_//' | jq -R 'split("=") | {(.[0] | ascii_downcase): .[1]}' | jq -sc 'add // {}')
+          echo "Generated JSON: $inputs_json"
+          echo "json_string=$inputs_json" >> $GITHUB_OUTPUT
+
+      - name: Call Kickoff Action
+        uses: ./.github/actions/kickoff-agent
+        with:
+          agent_name: ${{ needs.build.outputs.full_agent_name }}
+          agentic_runtime_api_url: ${{ vars.AGENTIC_RUNTIME_API_URL }}
+          crew_inputs_json: ${{ steps.crew_inputs.outputs.json_string }}
+          runtime_token: ${{ secrets.KBC_AUTHORIZATION_TOKEN }}
+          target_crew_name: ${{ vars.TARGET_CREW_NAME || '' }}
+    outputs:
+      full_agent_name: ${{ needs.build.outputs.full_agent_name }}
+
+
+  cleanup_pr_runtime:
+    runs-on: ubuntu-latest
+    needs: trigger_kickoff
+    if: github.ref != 'refs/heads/main'
+    env:
+      AGENTIC_RUNTIME_API_URL: ${{ vars.AGENTIC_RUNTIME_API_URL }}
+      AGENTIC_RUNTIME_API_TOKEN: ${{ secrets.AGENTIC_RUNTIME_API_TOKEN }}
+    steps:
+      - name: Prepare Branch-Specific Agent Name
+        id: prep_agent_name
+        env:
+          BASE_AGENT_NAME: ${{ vars.AGENT_NAME }}
+          GH_REF_NAME: ${{ github.ref_name }}
+          GH_HEAD_REF: ${{ github.head_ref }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$GH_EVENT_NAME" == "pull_request" ]; then
+            BRANCH_NAME="$GH_HEAD_REF"
+            echo "Event is pull_request, using head_ref: $BRANCH_NAME"
+          else
+            BRANCH_NAME="$GH_REF_NAME"
+            echo "Event is $GH_EVENT_NAME, using ref_name: $BRANCH_NAME"
+          fi
+
+          sanitized_branch=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed -e 's|/|-|g' -e 's|[^a-z0-9-]||g')
+          sanitized_branch=${sanitized_branch:0:20}
+          full_agent_name="$BASE_AGENT_NAME-$sanitized_branch"
+          echo "Full agent name: $full_agent_name"
+          echo "full_agent_name=$full_agent_name" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Delete Agent Runtime for Merged Branch
+        env:
+          AGENT_NAME: ${{ steps.prep_agent_name.outputs.full_agent_name }}
+        run: |
+          echo "Attempting to delete agent runtime '$AGENT_NAME' for merged branch..."
+          # Use -fsS but ignore 404 if it was already gone
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $AGENTIC_RUNTIME_API_TOKEN" \
+            -X DELETE \
+            "${{ env.AGENTIC_RUNTIME_API_URL }}/api/runtimes/${AGENT_NAME}")
+
+          if [ "$http_code" -eq 204 ]; then
+            echo "Successfully deleted agent runtime '$AGENT_NAME'."
+          elif [ "$http_code" -eq 404 ]; then
+            echo "Agent runtime '$AGENT_NAME' not found (already deleted or never existed)."
+          else
+            # Log error but don't fail the workflow for cleanup issues
+            echo "::warning::Failed to delete agent runtime '$AGENT_NAME', received HTTP status $http_code."
+          fi
