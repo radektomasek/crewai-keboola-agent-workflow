@@ -1,0 +1,18 @@
+[project]
+name = "keboola-insights-crew-demo"
+version = "0.0.1"
+description = "Simple agent that extract data from the Keboola, analyse them and send into a slack webhook"
+requires-python = ">=3.12"
+dependencies = [
+    "crewai>=0.114.0",
+    "openai>=1.75.0",
+    "requests>=2.32.3",
+    "python-dotenv>=1.1.0",
+    "pydantic>=2.11.3",
+    "uv>=0.6.14",
+    "pytz~=2025.1",
+    "chromadb~=0.6.0"
+]
+
+[tool.setuptools]
+py-modules = ["task_crew"]
