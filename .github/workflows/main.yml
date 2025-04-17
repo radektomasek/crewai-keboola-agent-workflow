@@ -132,7 +132,7 @@ jobs:
           ready=false; timeout=30; delay=15
           for (( i=1; i<=$timeout; i++ )); do
             echo "Attempt $i/$timeout: Checking status..."
-            status_response=$(curl -fsS --fail -H "Authorization: Bearer AGENTIC_RUNTIME_API_TOKEN" \
+            status_response=$(curl -fsS --fail -H "Authorization: Bearer $AGENTIC_RUNTIME_API_TOKEN" \
               "${{ env.AGENTIC_RUNTIME_API_URL }}/api/runtimes/${AGENT_NAME}")
             if [ $? -ne 0 ]; then echo "::error::Failed to get runtime status for $AGENT_NAME."; exit 1; fi
             current_status=$(echo "$status_response" | jq -r '.status.phase')
