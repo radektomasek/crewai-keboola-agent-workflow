@@ -22,19 +22,24 @@ calculate_billed_credits_task:
   description: >
     You are provided with Keboola usage data in CSV format from the previous task.
     
-    Look at the output of the previous task which contains the CSV data.
+    IMPORTANT: DO NOT DOWNLOAD ANY DATA. Use ONLY the CSV data that was already 
+    downloaded and returned by the download_data_task.
     
     Your task is to group this data by the 'Company_Name' column and calculate the **total billed credits** per company. 
     
     **You must**:
     
-    1. **Sum all numeric, non-empty values** in the 'Sum_of_Job_Billed_Credits_Used' column **for each company**.
-    2. Do NOT calculate an average. Only calculate a total sum.
-    3. Round each sum to exactly 2 decimal places.
-    4. Present each result on a new line, in the following format:
+    1. Parse the CSV data into a data structure you can analyze
+    2. Group by the 'Company_Name' column
+    3. For each company, sum ALL values in the 'Sum_of_Job_Billed_Credits_Used' column, treating null/empty values as 0
+    4. Make sure to include ALL companies present in the data, even if their total is 0
+    5. Round each sum to exactly 2 decimal places
+    6. Present each result on a new line, in the following format:
       <Company Name> - Total Billed Credits: X.XX
     
     Only include companies with a valid numeric billed credits total. Do not include any explanation, commentary, or extra text. Return only the output in the specified format.
+    
+    REMINDER: Use the data from the download_data_task output. DO NOT call the download tool again.
 
   expected_output: >
     Single line per company in '<Company Name> - Total Billed Credits: 123.45' format
@@ -43,18 +48,25 @@ calculate_error_rate_task:
   description: >
     You are provided with Keboola usage data in CSV format from the download_data_task.
     
-    Look at the output of the download_data_task which contains the CSV data.
+    IMPORTANT: DO NOT DOWNLOAD ANY DATA. Use ONLY the CSV data that was already 
+    downloaded and returned by the download_data_task.
     
     Your task is to group this data by the 'Company_Name' column:
     
-    **For each group you must**
+    **For each group you must**:
     
-    1. Calculate the average of all non-empty numeric values in the 'Error_Jobs_Ratio' column.
-    2. Round the result to exactly 4 decimal places.
-    3. Present the result in the following format (one line per company):
-    <Company Name> - Error Rate: 0.XXXX
+    1. Parse the CSV data into a data structure you can analyze
+    2. Group by the 'Company_Name' column
+    3. For each company, calculate the average of the non-empty numeric values in the 'Error_Jobs_Ratio' column
+    4. Make sure to include ALL companies that have at least one non-empty error ratio value
+    5. Round the result to exactly 4 decimal places
+    6. Present the result in the following format (one line per company):
+       <Company Name> - Error Rate: 0.XXXX
+    
     Only include companies that have at least one numeric error ratio value.
     Do not add any commentary or explanation.
+    
+    REMINDER: Use the data from the download_data_task output. DO NOT call the download tool again.
 
   expected_output: >
     Single line per company in '<Company Name> - Error Rate: 0.XXXX' format
@@ -79,8 +91,11 @@ generate_usage_summary_task:
       Total Billed Credits: X.XX
       Average Error Rate: 0.XXXX
     
+    Make sure to include ALL companies from both previous task outputs.
     Only include companies that have at least one of the two values.
     Do not explain your process, just return the summary.
+    
+    NOTE: Use ONLY the data from the previous task outputs. DO NOT download any new data.
 
   expected_output: >
     Formatted company summaries
@@ -91,16 +106,17 @@ slack_posting_task:
     
     Take the output from the previous task (generate_usage_summary_task) and format it for Slack.
     
-    Format the message as follows:
+    Format the message as follows with improved spacing:
     ```
-    Here is the summary of the Keboola Usage Report for Table {kbc_table_id}:
-    
+    Here is the summary of the Keboola Usage Report for `Table {kbc_table_id}`:
+
     - <Company Name>:
-      • Total Billed Credits: X.XX
-      • Error Rate: 0.XXXX
+      	• Total Billed Credits: X.XX
+      	• Error Rate: 0.XXXX
+
     - <Next Company>:
-      • Total Billed Credits: X.XX
-      • Error Rate: 0.XXXX
+      	• Total Billed Credits: X.XX
+      	• Error Rate: 0.XXXX
     ```
     
     FOLLOW THESE EXACT STEPS:
@@ -117,6 +133,8 @@ slack_posting_task:
     STEP 4: Respond with "Successfully posted to Slack: <your formatted message>"
     
     YOU MUST COMPLETE ALL STEPS, ESPECIALLY STEP 2. Your task is not complete until you have sent the message to Slack.
+    
+    NOTE: DO NOT download any new data. Use only the data from the previous task outputs.
 
   expected_output: >
     Confirmation of successful Slack posting with the formatted message

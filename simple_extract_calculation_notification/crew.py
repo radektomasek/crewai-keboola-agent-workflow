@@ -136,7 +136,7 @@ class KeboolaInsightsCrew:
         return Crew(
             agents=self.agents,
             tasks=self.tasks,
-            inputs=self.inputs,  # Updated to use inputs directly
+            _inputs=self.inputs,
             process=Process.sequential,
             chat_llm=self.llm,
             verbose=True,

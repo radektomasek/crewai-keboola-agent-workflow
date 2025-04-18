@@ -2,7 +2,6 @@ import time
 import pandas as pd
 import requests
 from io import StringIO
-from typing import Optional, Any
 
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials
@@ -33,24 +32,21 @@ class KeboolaDownloadTool(BaseTool):
 class SlackPostTool(BaseTool):
     name: str = "post_to_slack_tool"
     description: str = """
-    [REQUIRED TOOL] Posts a message to Slack using a webhook.
-    SLACK POSTING IS MANDATORY. This tool must be used to send messages to Slack.
+    Post a message to a Slack channel using a webhook URL.
 
     Args:
-        message (str): The message text to post to Slack
+        message (str): The message to post to Slack
 
     Returns:
-        str: Confirmation that the message was successfully posted to Slack
+        str: Confirmation message
     """
     webhook_url: str
 
     def _run(self, message: str) -> str:
         try:
-            result = post_to_slack(message, self.webhook_url)
-            # Make confirmation message very clear
-            return f"SUCCESS: Message has been posted to Slack: '{message[:50]}...'"
+            return post_to_slack(message, self.webhook_url)
         except Exception as e:
-            return f"ERROR: Failed to post to Slack: {str(e)}"
+            return f"Error posting to Slack: {str(e)}"
 
 def fetch_table_columns(table_id: str, kbc_api_token: str, kbc_api_url: str) -> list[str]:
     """Fetch column names from a Keboola table."""
@@ -104,6 +100,7 @@ def download_keboola_table(table_id: str, kbc_api_token: str, kbc_api_url: str) 
         manifest = requests.get(manifest_url).json()
         entries = manifest.get("entries", [])
 
+        # 📥 Download and combine all slices
         merged_df = pd.DataFrame()
         for entry in entries:
             gs_url = entry["url"]
