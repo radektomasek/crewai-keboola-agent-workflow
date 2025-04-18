@@ -2,8 +2,8 @@ download_data_task:
   description: >
     Download data from Keboola Storage API for analysis.
     
-    You need to get information about the table ID from the inputs passed to the crew.
-    The table ID will be available in the inputs dictionary under the key "kbc_table_id".
+    You need to get information about the table ID from the inputs.
+    The table ID is: {kbc_table_id}
     
     Use the download_keboola_table_tool to download this table.
     
@@ -11,9 +11,7 @@ download_data_task:
     
     Do I need to use a tool? Yes
     Action: download_keboola_table_tool
-    Action Input: <table_id>
-    
-    Make sure to replace <table_id> with the actual table ID from inputs.
+    Action Input: {kbc_table_id}
     
     Return the CSV data as your Final Answer.
 
@@ -69,7 +67,7 @@ generate_usage_summary_task:
     - calculate_billed_credits_task 
     - calculate_error_rate_task
     
-    Generate a summary report for Slack. For each company that appears in either list:
+    Generate a summary report. For each company that appears in either list:
     
       - Include the company name
       - Include its total billed credits (X.XX) if available
@@ -87,12 +85,13 @@ generate_usage_summary_task:
   expected_output: >
     Formatted company summaries
 
-format_and_post_to_slack_task:
+slack_posting_task:
   description: >
-    You are given a summary of Keboola usage metrics from the previous task.
+    THIS IS A SLACK POSTING TASK. YOUR ONLY JOB IS TO SEND A MESSAGE TO SLACK.
     
-    Reformat this summary into a more visually appealing format for Slack using this structure:
+    Take the output from the previous task (generate_usage_summary_task) and format it for Slack.
     
+    Format the message as follows:
     ```
     Here is the summary of the Keboola Usage Report for Table {kbc_table_id}:
     
@@ -104,18 +103,20 @@ format_and_post_to_slack_task:
       • Error Rate: 0.XXXX
     ```
     
-    IT IS ABSOLUTELY CRITICAL that after formatting the summary, you MUST post it to Slack.
-    Follow these exact steps:
+    FOLLOW THESE EXACT STEPS:
     
-    1. Format the summary as shown above
-    2. Use the post_to_slack_tool to send the summary to Slack using this exact format:
-       Do I need to use a tool? Yes
-       Action: post_to_slack_tool
-       Action Input: <your formatted summary>
-    3. Wait for the tool to confirm the posting was successful
-    4. Return the complete formatted summary along with confirmation of posting as your Final Answer
+    STEP 1: Format the message as shown above, replacing the placeholders with actual data
     
-    POSTING TO SLACK IS MANDATORY - your task is not complete until you have confirmed the message was posted to Slack.
+    STEP 2: Send the formatted message to Slack using this EXACT format:
+      Do I need to use a tool? Yes
+      Action: post_to_slack_tool
+      Action Input: <your formatted message>
+    
+    STEP 3: Wait for confirmation that the message was posted successfully
+    
+    STEP 4: Respond with "Successfully posted to Slack: <your formatted message>"
+    
+    YOU MUST COMPLETE ALL STEPS, ESPECIALLY STEP 2. Your task is not complete until you have sent the message to Slack.
 
   expected_output: >
-    Nicely formatted Slack message with explicit confirmation of successful posting
+    Confirmation of successful Slack posting with the formatted message

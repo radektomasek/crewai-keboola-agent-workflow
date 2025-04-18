@@ -33,22 +33,24 @@ class KeboolaDownloadTool(BaseTool):
 class SlackPostTool(BaseTool):
     name: str = "post_to_slack_tool"
     description: str = """
-    Post a message to a Slack channel using a webhook URL.
-    This tool is MANDATORY to use for sending summaries to Slack.
+    [REQUIRED TOOL] Posts a message to Slack using a webhook.
+    SLACK POSTING IS MANDATORY. This tool must be used to send messages to Slack.
 
     Args:
-        message (str): The message to post to Slack
+        message (str): The message text to post to Slack
 
     Returns:
-        str: Confirmation message
+        str: Confirmation that the message was successfully posted to Slack
     """
     webhook_url: str
 
     def _run(self, message: str) -> str:
         try:
-            return post_to_slack(message, self.webhook_url)
+            result = post_to_slack(message, self.webhook_url)
+            # Make confirmation message very clear
+            return f"SUCCESS: Message has been posted to Slack: '{message[:50]}...'"
         except Exception as e:
-            return f"Error posting to Slack: {str(e)}"
+            return f"ERROR: Failed to post to Slack: {str(e)}"
 
 def fetch_table_columns(table_id: str, kbc_api_token: str, kbc_api_url: str) -> list[str]:
     """Fetch column names from a Keboola table."""

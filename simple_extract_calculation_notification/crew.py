@@ -107,7 +107,7 @@ class KeboolaInsightsCrew:
 
     @task
     def generate_usage_summary_task(self) -> Task:
-        """Task to generate a summary and send to Slack"""
+        """Task to generate a summary"""
         task_config = self.tasks_config["generate_usage_summary_task"].copy()
 
         return Task(
@@ -116,9 +116,9 @@ class KeboolaInsightsCrew:
         )
 
     @task
-    def format_and_post_to_slack_task(self) -> Task:
-        """Task to format the summary in a nice layout and post to Slack"""
-        task_config = self.tasks_config["format_and_post_to_slack_task"].copy()
+    def slack_posting_task(self) -> Task:
+        """Task that ONLY posts a message to Slack. This must be run."""
+        task_config = self.tasks_config["slack_posting_task"].copy()
 
         if "description" in task_config and self.inputs:
             task_config["description"] = task_config["description"].format(
@@ -136,6 +136,7 @@ class KeboolaInsightsCrew:
         return Crew(
             agents=self.agents,
             tasks=self.tasks,
+            inputs=self.inputs,  # Updated to use inputs directly
             process=Process.sequential,
             chat_llm=self.llm,
             verbose=True,
