@@ -2,6 +2,7 @@ import time
 import pandas as pd
 import requests
 from io import StringIO
+from typing import Optional, Any
 
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials
@@ -33,6 +34,7 @@ class SlackPostTool(BaseTool):
     name: str = "post_to_slack_tool"
     description: str = """
     Post a message to a Slack channel using a webhook URL.
+    This tool is MANDATORY to use for sending summaries to Slack.
 
     Args:
         message (str): The message to post to Slack
@@ -100,7 +102,6 @@ def download_keboola_table(table_id: str, kbc_api_token: str, kbc_api_url: str) 
         manifest = requests.get(manifest_url).json()
         entries = manifest.get("entries", [])
 
-        # 📥 Download and combine all slices
         merged_df = pd.DataFrame()
         for entry in entries:
             gs_url = entry["url"]

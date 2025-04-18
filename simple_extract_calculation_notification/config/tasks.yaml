@@ -2,8 +2,8 @@ download_data_task:
   description: >
     Download data from Keboola Storage API for analysis.
     
-    You need to get information about the table ID from the inputs.
-    The table ID is: {kbc_table_id}
+    You need to get information about the table ID from the inputs passed to the crew.
+    The table ID will be available in the inputs dictionary under the key "kbc_table_id".
     
     Use the download_keboola_table_tool to download this table.
     
@@ -11,7 +11,9 @@ download_data_task:
     
     Do I need to use a tool? Yes
     Action: download_keboola_table_tool
-    Action Input: {kbc_table_id}
+    Action Input: <table_id>
+    
+    Make sure to replace <table_id> with the actual table ID from inputs.
     
     Return the CSV data as your Final Answer.
 
@@ -102,13 +104,18 @@ format_and_post_to_slack_task:
       • Error Rate: 0.XXXX
     ```
     
-    After formatting the summary, use the post_to_slack_tool to send it to Slack:
+    IT IS ABSOLUTELY CRITICAL that after formatting the summary, you MUST post it to Slack.
+    Follow these exact steps:
     
-    Do I need to use a tool? Yes
-    Action: post_to_slack_tool
-    Action Input: <your formatted summary>
+    1. Format the summary as shown above
+    2. Use the post_to_slack_tool to send the summary to Slack using this exact format:
+       Do I need to use a tool? Yes
+       Action: post_to_slack_tool
+       Action Input: <your formatted summary>
+    3. Wait for the tool to confirm the posting was successful
+    4. Return the complete formatted summary along with confirmation of posting as your Final Answer
     
-    After posting to Slack, return the complete formatted summary as your Final Answer.
+    POSTING TO SLACK IS MANDATORY - your task is not complete until you have confirmed the message was posted to Slack.
 
   expected_output: >
-    Nicely formatted Slack message with confirmation of posting
+    Nicely formatted Slack message with explicit confirmation of successful posting
