@@ -28,7 +28,7 @@ def run():
 
     try:
         print(f"Starting data analysis for Keboola table: {args.table_id}")
-        crew_result = KeboolaInsightsCrew().crew().kickoff(inputs=inputs)
+        crew_result = KeboolaInsightsCrew(inputs=inputs).crew().kickoff()
         print("Analysis completed successfully")
         print("\n\n########################")
         print("## Analysis Report")

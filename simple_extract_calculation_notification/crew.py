@@ -12,7 +12,7 @@ load_dotenv()
 class KeboolaInsightsCrew:
     """KeboolaInsightsCrew crew"""
 
-    def __init__(self):
+    def __init__(self, inputs=None):
         kbc_api_token = os.getenv("KBC_API_TOKEN")
         if not kbc_api_token:
             raise EnvironmentError("KBC_API_TOKEN not found in the environment variables")
@@ -49,6 +49,7 @@ class KeboolaInsightsCrew:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.agents_config = os.path.join(current_dir, "config", "agents.yaml")
         self.tasks_config = os.path.join(current_dir, "config", "tasks.yaml")
+        self.inputs = inputs or {}
 
     @agent
     def data_analyst(self) -> Agent:
@@ -73,6 +74,11 @@ class KeboolaInsightsCrew:
     def download_data_task(self) -> Task:
         """Task to download data from Keboola"""
         task_config = self.tasks_config["download_data_task"].copy()
+
+        if "description" in task_config and self.inputs:
+            task_config["description"] = task_config["description"].format(
+                **self.inputs
+            )
 
         return Task(
             config=task_config,
@@ -103,6 +109,21 @@ class KeboolaInsightsCrew:
     def generate_usage_summary_task(self) -> Task:
         """Task to generate a summary and send to Slack"""
         task_config = self.tasks_config["generate_usage_summary_task"].copy()
+
+        return Task(
+            config=task_config,
+            agent=self.data_analyst()
+        )
+
+    @task
+    def format_and_post_to_slack_task(self) -> Task:
+        """Task to format the summary in a nice layout and post to Slack"""
+        task_config = self.tasks_config["format_and_post_to_slack_task"].copy()
+
+        if "description" in task_config and self.inputs:
+            task_config["description"] = task_config["description"].format(
+                **self.inputs
+            )
 
         return Task(
             config=task_config,

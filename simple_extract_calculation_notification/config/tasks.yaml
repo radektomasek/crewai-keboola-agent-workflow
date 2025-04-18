@@ -2,8 +2,8 @@ download_data_task:
   description: >
     Download data from Keboola Storage API for analysis.
     
-    You need to get information about the table ID from the inputs passed to the crew.
-    The table ID will be available in the inputs dictionary under the key "kbc_table_id".
+    You need to get information about the table ID from the inputs.
+    The table ID is: {kbc_table_id}
     
     Use the download_keboola_table_tool to download this table.
     
@@ -11,9 +11,7 @@ download_data_task:
     
     Do I need to use a tool? Yes
     Action: download_keboola_table_tool
-    Action Input: <table_id>
-    
-    Make sure to replace <table_id> with the actual table ID from inputs.
+    Action Input: {kbc_table_id}
     
     Return the CSV data as your Final Answer.
 
@@ -83,14 +81,34 @@ generate_usage_summary_task:
     
     Only include companies that have at least one of the two values.
     Do not explain your process, just return the summary.
+
+  expected_output: >
+    Formatted company summaries
+
+format_and_post_to_slack_task:
+  description: >
+    You are given a summary of Keboola usage metrics from the previous task.
     
-    After generating the summary, use the post_to_slack_tool to send this summary to Slack using this format:
+    Reformat this summary into a more visually appealing format for Slack using this structure:
+    
+    ```
+    Here is the summary of the Keboola Usage Report for Table {kbc_table_id}:
+    
+    - <Company Name>:
+      • Total Billed Credits: X.XX
+      • Error Rate: 0.XXXX
+    - <Next Company>:
+      • Total Billed Credits: X.XX
+      • Error Rate: 0.XXXX
+    ```
+    
+    After formatting the summary, use the post_to_slack_tool to send it to Slack:
     
     Do I need to use a tool? Yes
     Action: post_to_slack_tool
-    Action Input: <your generated summary>
+    Action Input: <your formatted summary>
     
-    After posting to Slack, return the complete summary as your Final Answer.
+    After posting to Slack, return the complete formatted summary as your Final Answer.
 
   expected_output: >
-    Formatted company summaries, with confirmation of posting to Slack
+    Nicely formatted Slack message with confirmation of posting
